@@ -1,0 +1,356 @@
+---
+title: ""
+author: ""
+date: ""
+output:
+  word_document:
+    reference_docx: cgi_template.docx
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r packages , message=FALSE}
+library(readxl)
+library(wesanderson) # For colors
+library(readxl)
+library(knitr)
+library(reshape2)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+options(scipen=999)
+```
+
+
+## Bakgrund
+12 vattenprover från olika lokaler i Västerbottens Mellanbygd har samlats in för eDNA analys. Proverna är insamlade vid olika tillfällen under 2016 och för ett antal av lokalerna har prover tagits både under vår och höst. För att identifiera arter har en kort bit av genen "12S Ribosomal RNA" från mitokondrien amplifierats och sekvenserats med moderna sekvensmetoder. Då det är en kort bit DNA (ca 100bp) går det inte alltid att identifiera vilken art sekvenser kommer ifrån utan ibland kan man bara säga att det kommer från ett släkte. Detta är fallet för gruppen som vi i rapporten kallar Abborre/Gös. Det är alltså antingen abborre eller gös som dessa sekvenser kommer ifrån.
+
+```{r Prover}
+
+prov <- read_excel("~/Documents/Fisk_Skelleftea/Report/Data/Skellefteå_kommun_prover.xlsx")
+kable(prov)
+```
+
+## Genererat data
+För att identifiera arter från DNA som finns i vattnet har ett kort segment från mitokondrien ampilifierats och sekvenserats med moderna sekvensmetoder. Totalt för samtliga prover erhölls 14522165 sekvenser som efter kvalitetsfiltrering reducerats till 1388743 sekvenser. Dessa fördelade sig dock inte lika över prover och ett litet antal proverna har inte genererat tillräckligt med data för att man skall kunna med säkerhet säga något om vilka arter som kan tänkas finnas i de vattnen. Summerar man antal användbara läsningar per prov (Tabell 2) ser man att för fyra av proverna erhölls förhållandevis lite data. Resultaten från dessa står med i rapporten, men vi uppmanar till stor försiktighet när det kommer till att dra slutsatser rörande bestånden i dessa vatten. 
+
+```{r data_import, echo=FALSE}
+species <- read_excel("~/Documents/Fisk_Skelleftea/Report/Data/preliminary_all.xlsx", sheet = 2)
+prov2 <- prov[order(prov$Labnr),]
+species_counts <- species[,c(3:18,21)]
+species_sum <- species_counts %>% 
+  group_by(Species) %>% 
+  summarise_all(funs(sum))
+
+group_counts <- species[,c(3:18, 22)]
+colnames(group_counts) <- c(paste(prov2$Labnr, prov2$Lokal, sep = "-"), "Grupp")
+group_sum <- group_counts %>% 
+  group_by(Grupp) %>% 
+  summarise_all(funs(sum))
+#colnames(group_sum) <- c("Grupp", prov$Lokal[-12])
+
+fisk_counts <- species[species$Group=="Fisk",c(3:18,21)]
+colnames(fisk_counts) <- c(paste(prov2$Labnr, prov2$Lokal, sep = "-"), "Art")
+fisk_sum <- fisk_counts %>% 
+  group_by(Art) %>% 
+  summarise_all(funs(sum))
+
+dagg_counts <- species[species$Group=="Däggdjur",c(3:18,21)]
+colnames(dagg_counts) <- c(paste(prov2$Labnr, prov2$Lokal, sep = "-"), "Art")
+dagg_sum <- dagg_counts %>% 
+  group_by(Art) %>% 
+  summarise_all(funs(sum))
+
+fagel_counts <- species[species$Group=="Fågel",c(3:18,21)]
+colnames(fagel_counts) <- c(paste(prov2$Labnr, prov2$Lokal, sep = "-"), "Art")
+dagg_sum <- fagel_counts %>% 
+  group_by(Art) %>% 
+  summarise_all(funs(sum))
+
+nofisk_counts <- species[species$Group!="Fisk",c(3:18,21)]
+colnames(nofisk_counts) <- c(paste(prov2$Labnr, prov2$Lokal, sep = "-"), "Art")
+nofisk_counts <- nofisk_counts[nofisk_counts$Art!="NA",]
+nofisk_sum <- nofisk_counts %>% 
+  group_by(Art) %>% 
+  summarise_all(funs(sum))
+
+group_m <- melt(group_counts,id.vars = 17)
+colnames(group_m) <- c("Grupp", "Lokal", "Läsningar")
+fisk_m <- melt(fisk_counts, id.vars = 17)
+colnames(fisk_m) <- c("Art", "Lokal", "Läsningar")
+fisk_m <- as_data_frame(fisk_m)
+class(fisk_m$Läsningar)<-"integer"
+nofisk_m <- melt(nofisk_counts, id.vars = 17)
+colnames(nofisk_m) <- c("Grupp", "Lokal", "Läsningar")
+
+dagg_m <- melt(dagg_counts, id.vars = 17)
+colnames(dagg_m) <- c("Art", "Lokal", "Läsningar")
+dagg_m <- as_data_frame(dagg_m)
+
+fagel_m <- melt(fagel_counts, id.vars = 17)
+colnames(fagel_m) <- c("Art", "Lokal", "Läsningar")
+fagel_m <- as_data_frame(fagel_m)
+```
+
+
+```{r, fig.cap="Läsningar per prov"}
+kable(colSums(group_counts[,-17]),col.names = "Sekvenser")
+
+```
+
+I Figur 1 visas antal läsningar summerat över de vanligaste organismgrupperna. De prover som inte med säkerhet kunde klassificeras hittas under kategorien NA. För de prover som fungerat bra har vi således mellan 1000 och 50000 sekvenser som med säkerhet kan spåras till fiskarter.
+
+```{r, dpi=300, fig.cap="Figur 1. Antal erhållna användbara sekvenser per lokal och över artgrupper", echo=FALSE}
+ggplot(group_m,aes(x = Lokal, y = Läsningar+1)) + geom_bar(aes(fill = Grupp),stat = "identity",position = "dodge") + coord_flip() + scale_fill_manual(values=wes_palette(n=4, name="FantasticFox1")) + scale_y_log10()  + xlab("") + ylab("Antal sekvenser (log10)")
+```
+
+## Resultat
+Analysen har fokuserat på analys av fiskarter och för varje prov finns resultat och en figur under rubriken "Fisk". Förutom fisk kan man med denna metod detektera dna från fåglar och däggdjur. För dessa organismgrupper har vi inte genererat figurer för samtliga prover utan vi presenterar en mer överskådlig bild av resultatet under rubriken "Andra organismgrupper".
+
+### Fisk
+Resultat prov för prov är sorterade från norr till söder. För att göra figurerna mer överskådliga visas bara de arter som hittats i det vattnet. Antalet detekterad sekvenser korrelerar till biomassan av en given art, men korrelationen är långt ifrån perfekt och det finns stora slumpeffekter som kan påverka enskilda prover och arter. Detta gör att man inte bör jämföra siffror mellan prover, men inom ett prov är det åtminstone oftast så att de arter som det finns flest läsningar från är vanligast (sett till biomassa) från det vattnet. Våran erfarenhet säger dock att den mest säkra signalen från dylika data är att se närvaro av DNA från en art som bevis på att den finns i vattnet (eller i avrinningsområdet) och inte lägga så stor vikt vid hur många sekvenser som man observerar från provet. Detta problem finns ju även för provfiske av vatten, där vissa arter är svårare att få i nät och man således inte direkt kan skatta populationssammansättning från fångstdata utan att ta hänsyn till hur ofta olika arter tendererar fångas i nät.
+
+#### Harrbäcken, Kinnbäck
+Från denna lokal erhölls `r sum(fisk_sum$'1-Harrbäcken, Kinnbäck')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'1-Harrbäcken, Kinnbäck'>0)` olika arter och antal sekvenser per art kan ses i figur 2. 
+
+```{r, dpi=300, fig.cap="Figur 2. Antal sekvenser per fiskart"}
+fiskharrb <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="1-Harrbäcken, Kinnbäck") %>%
+  group_by(Art) %>% 
+  summarise(Läsningar = sum(Läsningar))
+#class(harrb[[2]])<-"integer"
+Herts <- ggplot(fiskharrb, aes(Art,y = Läsningar))
+#Herts <- ggplot(fisk_m %>% filter(Läsningar > 0 & Lokal =="1-Harrbäcken, Kinnbäck"), aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Harrbäcken, Kinnbäck 2016-05-19") +
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+
+```
+
+
+#### Tåmälven
+Denna lokal har provtagits både vår och höst. För vår- och höstprover erhölls `r sum(fisk_sum$'2-Tåmälven')` respektive `r sum(fisk_sum$'7-Tåmälven')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'7-Tåmälven'>0 | fisk_sum$'2-Tåmälven'>0)` olika arter och antal sekvenser per art och insamlingstillfälle kan ses i figur 3 och 4. Det är svårt att göra en jämförelse mellan insamlingstillfällen provet det från höstprovet endast erhölls 79 sekvenser som kan spåras till fisk. Trots det låga antalet läsningar ser vi att de 5 vanligaste arterna i vårprovet hittas även i höstprovet. 
+
+```{r, dpi=300, fig.cap="Figur 3. Antal sekvenser per fiskart"}
+fisktam2 <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="2-Tåmälven") %>%
+  group_by(Art) %>% 
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(fisktam2, aes(Art,y = Läsningar))
+#Herts <- ggplot(fisk_m %>% filter(Läsningar > 0 & Lokal =="2-Tåmälven"), aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Tåmälven 2016-05-19") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+
+```
+
+```{r, dpi=300, fig.cap="Figur 4. Antal sekvenser per fiskart"}
+fisktam2 <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="7-Tåmälven") %>%
+  group_by(Art) %>% 
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(fisktam2, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Tåmälven 2016-08-31") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+
+```
+
+#### Storbäcken
+Från denna lokal erhölls `r sum(fisk_sum$'3-Storbäcken')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'3-Storbäcken'>0)` olika arter och antal sekvenser per art kan ses i figur 5. Denna lokal var en av lokalerna med störst diversitet när det kommer till antal identifierade arter och vi noterar att det finns spår av sutare vilket är oväntat så pass långt norrut.
+
+```{r, dpi=300, fig.cap="Figur 5. Antal sekvenser per fiskart"}
+storb <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="3-Storbäcken") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(storb, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Storbäcken 2016-05-19") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+
+```
+
+#### Kågeälven
+Från denna lokal erhölls `r sum(fisk_sum$'8-Kågeälven')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'8-Kågeälven'>0)` olika arter och antal sekvenser per art kan ses i figur 6. Här detekterar vi spår från många olika arter och av de vatten och ser en stor andel öring.
+
+```{r, dpi=300, fig.cap="Figur 6. Antal sekvenser per fiskart"}
+kage <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="8-Kågeälven") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(kage, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Kågeälven 2016-08-31") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+
+#### Harrbäcken, Harrbäcksand
+Från denna lokal erhölls `r sum(fisk_sum$'4-Harrbäcken, Harrbäcksand')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'4-Harrbäcken, Harrbäcksand'>0)` olika arter och antal sekvenser per art kan ses i figur 7. Denna lokal är en av de där det är begränsat med data, men dock noterbart att vi ändå ser spår från många arter.
+
+```{r, dpi=300, fig.cap="Figur 7. Antal sekvenser per fiskart"}
+harrb2 <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="4-Harrbäcken, Harrbäcksand") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(harrb2, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Harrbäcken, Harrbäcksand 2016-05-19") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+#### Bureälven
+Från denna lokal erhölls `r sum(fisk_sum$'9-Bureälven')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'9-Bureälven'>0)` olika arter och antal sekvenser per art kan ses i figur 8. Det totala antalet sekvenser här är så pass lågt så som nämnts ovan är det inte ett bra underlag att dra slutsatser ifrån.
+
+```{r, dpi=300, fig.cap="Figur 8. Antal sekvenser per fiskart"}
+harrb2 <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="9-Bureälven") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(harrb2, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Bureälven 2016-08-31") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+
+#### Bäckån
+Denna lokal har provtagits både vår och höst. För vår- och höstprover erhölls `r sum(fisk_sum$'5-Bäckån')` respektive `r sum(fisk_sum$'10-Bäckån')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'5-Bäckån'>0 | fisk_sum$'10-Bäckån'>0)` olika arter och antal sekvenser per art och insamlingstillälle kan ses i figur 9 och 10. För vårprovet där lite mindre data erhållits ses något som troligtvis enklast förklaras av slumpmässiga variationer vid provtagning. Även om id är en vanlig art här uppe tror jag inte att biomassan för id är mer än 90% av den totala biomassan av fisk utan antagligen är det så att det varit lokalt hög närvaro av id vid provtagningstillfället och då blir den signalen väldigt stark. Om man antar att artkompositionen är ganska liknande mellan vår och höst ser vi att id förekommer även i höstprovet, men den är inte helt dominerande. 
+
+
+```{r, dpi=300, fig.cap="Figur 9. Antal sekvenser per fiskart"}
+backan <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="5-Bäckån") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(backan, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Bäckån 2016-05-19") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+```{r, dpi=300, fig.cap="Figur 10. Antal sekvenser per fiskart"}
+backan2 <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="10-Bäckån") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(backan2, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Bäckån 2016-08-31") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+#### Mångbyån
+Denna lokal har provtagits både vår och höst. För vår- och höstprover erhölls `r sum(fisk_sum$'6-Mångbyån')` respektive `r sum(fisk_sum$'11-Mångbyån')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'6-Mångbyån'>0 | fisk_sum$'11-Mångbyån'>0)` olika arter och antal sekvenser per art och insamlingstillälle kan ses i figur 11 och 12. Här har vi bra med data från både vår och höst och detekterar många arter för båda insamlingstillfällena. Under hösten ser vi alla arter som hittas i vårprovet, men dessutom ser vi spår av löja, nors och småspigg.
+
+
+
+
+```{r, dpi=300, fig.cap="Figur 11. Antal sekvenser per fiskart"}
+mang <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="6-Mångbyån") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(mang, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Mångbyån 2016-05-19") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+
+```{r, dpi=300, fig.cap="Figur 12. Antal sekvenser per fiskart"}
+mang2 <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="11-Mångbyån") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(mang2, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Mångbyån 2016-08-31") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+#### Hertsångerälven
+Medelhumös älv med hög jonstyrka. Det finns enstaka rapporter om lake, gädda  och flodnejonöga och högre upp i vattendraget finns rapporter om att det finns öring. Från denna lokal erhölls `r sum(fisk_sum$'14-Hertsångerälven')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'14-Hertsångerälven'>0)` olika arter och antal sekvenser per art kan ses i figur 13. Noterbart är att vi inte kan detektera spår av abborre som skall finnas i vattnet, men däremot ser vi ett stort antal läsningar från Stensimpa.
+
+```{r, dpi=300, fig.cap="Figur 13. Antal sekvenser per fiskart"}
+herts <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="14-Hertsångerälven") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(herts, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Hertsångerälven 2016-09-06") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+#### Trybäcken
+Ett starkt humöst men jonsvagt vatten där det från tidigare data skall finnas gädda och möjligen havsöring, öring, ål och nejonöga. Från denna lokal erhölls `r sum(fisk_sum$'16-Trybäcken')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'16-Trybäcken'>0)` olika arter och antal sekvenser per art kan ses i figur 14. Det verkar vara ett vatten med ganska hög diversitet, men som tydligt domineras av gädda och mört.
+
+```{r, dpi=300, fig.cap="Figur 14. Antal sekvenser per fiskart"}
+tryb <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="16-Trybäcken") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(tryb, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Trybäcken 2016-09-06") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+#### Åkullsjön
+Enligt eran beskrivnig en svagt humös sjö med måttlig jonstyrka där det skall finnas mört, abborre, gädda och tidigare även ål. Från denna lokal erhölls `r sum(fisk_sum$'17-Åkullsjön')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'17-Åkullsjön'>0)` olika arter och antal sekvenser per art kan ses i figur 15. Denna analys kan således inte se spår av ål, men detekterar förhållandevis många andra arter inklusive öring, men biomassan domineras av abborre, gädda och mört.
+
+```{r, dpi=300, fig.cap="Figur 15. Antal sekvenser per fiskart"}
+akull <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="17-Åkullsjön") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(akull, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Åkullsjön 2016-09-06") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+#### Västra dalkarsån
+Ett vatten med låg jonstyrka som är svagt humöst. Det finns uppgifter om öring, abborre, mört, lake, gers och stensimpa från detta vatten. Från denna lokal erhölls `r sum(fisk_sum$'13-Västra Dalkarsån')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'13-Västra Dalkarsån'>0)` olika arter och antal sekvenser per art kan ses i figur 16. Det helt klart mest noterbara är att det hittas spår av sutare vilket inte är vanligt så långt norrut och det stora antalet sekvenser som kommer från öring.
+
+```{r, dpi=300, fig.cap="Figur 16. Antal sekvenser per fiskart"}
+gran <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="13-Västra Dalkarsån") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(gran, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Västra Dalkarsån 2016-09-06") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+#### Tavleån
+Medelhumös å med måttlig jonstyrka. Enligt tidigare data finns här förutom gädda och abborre troligtvis även öring, ål, id och mört. Från denna lokal erhölls `r sum(fisk_sum$'15-Tavleån')` sekvenser som klassificerats som fisk. Dessa läsningar kommer från `r sum(fisk_sum$'15-Tavleån'>0)` olika arter och antal sekvenser per art kan ses i figur 17. Noterbart är att vi inte kan detektera spår av abborre som skall finnas i vattnet, men däremot ser vi ett stort antal läsningar från Stensimpa.
+```{r, dpi=300, fig.cap="Figur 17. Antal sekvenser per fiskart"}
+tavl <- fisk_m %>% 
+  filter(Läsningar > 0 & Lokal =="15-Tavleån") %>%
+  group_by(Art) %>%
+  summarise(Läsningar = sum(Läsningar))
+Herts <- ggplot(tavl, aes(Art,y = Läsningar))
+Herts + geom_bar(stat = "identity", fill = wes_palette("Zissou1", 1)) + labs(title = "Tavleån 2016-09-06") + 
+geom_text(aes(label=Läsningar), vjust=-0.3, size=2.5) +
+theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+### Andra organismgrupper
+Som väntat i dylika studier hittar vi sekvenser från människa i samtliga prover, det är dessutom det vanligaste sekvensen i samtliga prover. Detta är mycket vanligt i dessa typer av data och beror mest troligt på att det finns ganska mycket rester av människa i många vatten. Det kan även förstärkas om provtagning sker nära en badplats under badsäsong. Sedan är du ju också så att eventuell kontaminering vid provtagning eller under laboratoriearbetet kommer vara från människa. Andra tydliga signaler som vi i de flesta proverna är sekvenser från hund. Den biten vi sekvenserat är identisk mellan hund och varg så rent teoretiskt skulle det också kunna vara varg, men given storleken på vargpopulationen i sverige finner jag hund mer troligt. Vi ser dessutom sekvenser från svin från flera lokale och precis som för hund/varg skulle dessa kunna vara vildsvin, men tätheten av vildsvin så pass långt norrut borde inte kunna generera så pass mycket signal. 
+
+Bland fåglarna ser vi spår av rovfåglar, sjöfåglar och en del mindre arter. Antagligen är mycket av dessa från spillningsrester som finns i vattnet och dess avrinningsområdet. 
+
+I figur 18 och 19 ser vi liknande figurer som tidigare, men samtliga lokaler i en och samma figur. För dessa data har det endast gjort en grov klassificering och de prover som ser ut som gnagare eller rovfågel har inte vidare klassificerats.
+
+```{r, dpi=300, fig.cap="Figur 18. Antal däggdjurssekvenser per lokal"}
+ggplot(dagg_m,aes(x = Lokal, y = Läsningar+1)) + geom_bar(aes(fill = Art),stat = "identity", width = 0.5, position = position_dodge(width = 0.5)) + scale_y_log10()  + xlab("") + ylab("Antal sekvenser (log10)") + theme(axis.text.x=element_text(angle=45, hjust=1)) + labs(title = "Däggdjur")
+```
+
+```{r, dpi=300, fig.cap="Figur 19. Antal fågelsekvenser per lokal"}
+ggplot(fagel_m,aes(x = Lokal, y = Läsningar+1)) + geom_bar(aes(fill = Art),stat = "identity", width = 0.5, position = position_dodge(width = 0.5)) + scale_y_log10()  + xlab("") + ylab("Antal sekvenser (log10)") + theme(axis.text.x=element_text(angle=45, hjust=1)) + labs(title = "Fågel")
+```
